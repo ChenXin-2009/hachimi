@@ -1,0 +1,26 @@
+# 音频分离和二创工具依赖
+
+# 深度学习和音频分离
+demucs>=4.0.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# GUI 框架
+PyQt6>=6.4.0
+pyqtgraph>=0.13.0
+
+# 音频处理
+pedalboard>=0.7.0
+pydub>=0.25.0
+soundfile>=0.12.0
+librosa>=0.10.0
+
+# 音频播放
+sounddevice>=0.4.6
+
+# 数值计算
+numpy>=1.24.0
+
+# 测试（可选）
+pytest>=7.4.0
+pytest-qt>=4.2.0
