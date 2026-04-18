@@ -63,3 +63,9 @@ Thumbs.db
 
 # PyInstaller
 *.spec
+
+# Kiro 配置和规格文件
+.kiro/
+
+# 文档（开发用）
+docs/
