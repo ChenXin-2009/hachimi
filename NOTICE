@@ -1,0 +1,55 @@
+Hachimi (ハチミ)
+Copyright 2026 ChenXin-2009 and Hachimi Contributors
+
+This product includes software developed by the Hachimi project
+(https://github.com/ChenXin-2009/hachimi).
+
+This software uses the following open source components:
+
+1. Demucs
+   - Copyright (c) Meta Platforms, Inc. and affiliates
+   - License: MIT License
+   - https://github.com/facebookresearch/demucs
+
+2. PyQt6
+   - Copyright (c) Riverbank Computing Limited
+   - License: GPL v3 / Commercial License
+   - https://www.riverbankcomputing.com/software/pyqt/
+
+3. PyQtGraph
+   - Copyright (c) PyQtGraph developers
+   - License: MIT License
+   - https://www.pyqtgraph.org/
+
+4. Pedalboard
+   - Copyright (c) Spotify AB
+   - License: GPL v3
+   - https://github.com/spotify/pedalboard
+
+5. PyDub
+   - Copyright (c) James Robert
+   - License: MIT License
+   - https://github.com/jiaaro/pydub
+
+6. PyTorch
+   - Copyright (c) Meta Platforms, Inc. and affiliates
+   - License: BSD-style License
+   - https://pytorch.org/
+
+7. soundfile
+   - Copyright (c) Bastian Bechtold
+   - License: BSD 3-Clause License
+   - https://github.com/bastibe/python-soundfile
+
+8. librosa
+   - Copyright (c) librosa development team
+   - License: ISC License
+   - https://librosa.org/
+
+9. sounddevice
+   - Copyright (c) Matthias Geier
+   - License: MIT License
+   - https://github.com/spatialaudio/python-sounddevice
+
+For the full license text of each component, please refer to their
+respective repositories and documentation.
