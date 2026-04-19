@@ -29,6 +29,7 @@ class AudioPlayer(QObject):
         self._sample_rate = 44100
         self._stream: Optional[sd.OutputStream] = None
         self._current_frame = 0
+        self._tracks: List[Track] = []  # 保存音轨引用
         
         # 位置更新定时器
         self._position_timer = QTimer()
@@ -46,6 +47,9 @@ class AudioPlayer(QObject):
         """
         logger.info("加载音轨用于播放")
         
+        # 保存音轨引用
+        self._tracks = tracks
+        
         # 混合音轨
         self._mixed_audio = self.mixer.mix_tracks(tracks)
         
@@ -56,6 +60,22 @@ class AudioPlayer(QObject):
             logger.info(f"音频加载成功，采样率: {self._sample_rate} Hz")
         else:
             logger.warning("没有可播放的音频")
+    
+    def reload_mix(self):
+        """重新混合音轨（用于实时更新音轨参数）"""
+        if not self._tracks:
+            return
+        
+        # 保存当前位置
+        current_position = self._current_frame
+        
+        # 重新混合
+        self._mixed_audio = self.mixer.mix_tracks(self._tracks)
+        
+        # 恢复位置
+        self._current_frame = current_position
+        
+        logger.debug("实时重新混合音轨")
     
     def play(self):
         """开始播放"""
