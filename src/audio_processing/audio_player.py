@@ -96,13 +96,23 @@ class AudioPlayer(QObject):
             logger.warning("没有可播放的音频")
     
     def reload_mix(self):
-        """重新混合音轨（带防抖和智能策略）"""
+        """重新混合音轨（带防抖、节流和智能策略）"""
         if not self._tracks:
             return
         
+        # 检查是否正在混音
+        if self._is_mixing:
+            logger.debug("正在混音中，跳过本次请求")
+            return
+        
         if self._is_playing:
-            # 播放中：使用防抖延迟混音
-            self._remix_timer.start(self._remix_debounce_ms)
+            # 播放中：使用防抖延迟混音，并限制频率
+            if not self._remix_timer.isActive():
+                self._remix_timer.start(self._remix_debounce_ms)
+            else:
+                # 定时器已激活，重置定时器
+                self._remix_timer.stop()
+                self._remix_timer.start(self._remix_debounce_ms)
         else:
             # 暂停中：标记需要混音，播放时再执行
             self._needs_remix = True

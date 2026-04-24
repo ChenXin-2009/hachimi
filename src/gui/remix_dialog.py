@@ -709,19 +709,62 @@ class RemixDialog(QDialog):
         return group
     
     def _create_step2_group(self) -> QGroupBox:
-        """步骤2: 选择目标音轨（已简化）"""
-        group = QGroupBox("步骤 2: 确认音轨")
+        """步骤2: 选择目标音轨"""
+        group = QGroupBox("步骤 2: 选择需要二创的音轨")
         layout = QVBoxLayout(group)
         
-        info_label = QLabel("将为所有音轨生成二创版本")
+        info_label = QLabel("选择要生成二创版本的音轨（可多选）")
         info_label.setStyleSheet("color: #888888;")
         layout.addWidget(info_label)
         
-        # 显示音轨数量
-        tracks = self.track_manager.get_all_tracks()
-        track_count_label = QLabel(f"当前项目有 {len(tracks)} 个音轨")
-        track_count_label.setStyleSheet("color: #ffffff; padding: 8px;")
-        layout.addWidget(track_count_label)
+        # 音轨选择列表
+        self.track_selection_list = QListWidget()
+        self.track_selection_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self.track_selection_list.setMaximumHeight(150)
+        self.track_selection_list.setStyleSheet("""
+            QListWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #3c3c3c;
+            }
+            QListWidget::item:selected {
+                background-color: #0078d4;
+                color: #ffffff;
+            }
+            QListWidget::item:hover {
+                background-color: #2b2b2b;
+            }
+        """)
+        layout.addWidget(self.track_selection_list)
+        
+        # 快速选择按钮
+        quick_select_layout = QHBoxLayout()
+        
+        select_all_btn = QPushButton("全选")
+        select_all_btn.clicked.connect(self._select_all_tracks)
+        quick_select_layout.addWidget(select_all_btn)
+        
+        deselect_all_btn = QPushButton("取消全选")
+        deselect_all_btn.clicked.connect(self._deselect_all_tracks)
+        quick_select_layout.addWidget(deselect_all_btn)
+        
+        select_vocals_btn = QPushButton("仅人声")
+        select_vocals_btn.clicked.connect(lambda: self._select_tracks_by_type("vocals"))
+        quick_select_layout.addWidget(select_vocals_btn)
+        
+        quick_select_layout.addStretch()
+        
+        layout.addLayout(quick_select_layout)
+        
+        # 选中数量提示
+        self.track_selection_label = QLabel("未选择音轨")
+        self.track_selection_label.setStyleSheet("color: #888888; padding: 4px;")
+        layout.addWidget(self.track_selection_label)
+        
+        # 更新音轨列表
+        self._update_track_selection_list()
+        
+        # 连接选择变化事件
+        self.track_selection_list.itemSelectionChanged.connect(self._on_track_selection_changed)
         
         return group
     
@@ -747,24 +790,116 @@ class RemixDialog(QDialog):
         group = QGroupBox("步骤 4: 生成二创")
         layout = QVBoxLayout(group)
         
-        info_label = QLabel("用素材片段完全替换所有音轨，自动匹配音高")
+        info_label = QLabel("用素材片段完全替换选中的音轨，自动匹配音高")
         info_label.setStyleSheet("color: #888888;")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
         
         # 生成按钮
-        generate_btn = QPushButton("✨ 生成所有音轨的二创版本")
+        generate_btn = QPushButton("✨ 生成选中音轨的二创版本")
         generate_btn.clicked.connect(self.generate_remix)
+        generate_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 12px 16px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #1084d8;
+            }
+            QPushButton:pressed {
+                background-color: #006cbd;
+            }
+        """)
         layout.addWidget(generate_btn)
         
         return group
     
     def _update_track_list(self):
-        """更新音轨列表"""
-        self.track_combo.clear()
+        """更新音轨列表（保留兼容）"""
+        self._update_track_selection_list()
+    
+    def _update_track_selection_list(self):
+        """更新音轨选择列表"""
+        if not hasattr(self, 'track_selection_list'):
+            return
+        
+        self.track_selection_list.clear()
         tracks = self.track_manager.get_all_tracks()
+        
         for track in tracks:
-            self.track_combo.addItem(f"{track.name} ({track.source_type})", track)
+            # 创建列表项
+            item_text = f"{track.name} ({track.source_type})"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, track)  # 存储音轨对象
+            
+            # 添加图标（根据音轨类型）
+            icon_map = {
+                "vocals": "🎤",
+                "drums": "🥁",
+                "bass": "🎸",
+                "guitar": "🎸",
+                "piano": "🎹",
+                "other": "🎵"
+            }
+            icon = icon_map.get(track.source_type, "🎵")
+            item.setText(f"{icon} {item_text}")
+            
+            self.track_selection_list.addItem(item)
+        
+        # 默认全选
+        self._select_all_tracks()
+    
+    def _select_all_tracks(self):
+        """全选音轨"""
+        for i in range(self.track_selection_list.count()):
+            self.track_selection_list.item(i).setSelected(True)
+        self._on_track_selection_changed()
+    
+    def _deselect_all_tracks(self):
+        """取消全选"""
+        self.track_selection_list.clearSelection()
+        self._on_track_selection_changed()
+    
+    def _select_tracks_by_type(self, track_type: str):
+        """按类型选择音轨"""
+        self.track_selection_list.clearSelection()
+        
+        for i in range(self.track_selection_list.count()):
+            item = self.track_selection_list.item(i)
+            track = item.data(Qt.ItemDataRole.UserRole)
+            if track.source_type == track_type:
+                item.setSelected(True)
+        
+        self._on_track_selection_changed()
+    
+    def _on_track_selection_changed(self):
+        """音轨选择变化"""
+        selected_count = len(self.track_selection_list.selectedItems())
+        total_count = self.track_selection_list.count()
+        
+        if selected_count == 0:
+            self.track_selection_label.setText("⚠️ 未选择音轨")
+            self.track_selection_label.setStyleSheet("color: #ff6464; padding: 4px;")
+        elif selected_count == total_count:
+            self.track_selection_label.setText(f"✓ 已选择全部 {selected_count} 个音轨")
+            self.track_selection_label.setStyleSheet("color: #00ff00; padding: 4px;")
+        else:
+            self.track_selection_label.setText(f"✓ 已选择 {selected_count}/{total_count} 个音轨")
+            self.track_selection_label.setStyleSheet("color: #00ff00; padding: 4px;")
+    
+    def _get_selected_tracks(self):
+        """获取选中的音轨"""
+        selected_tracks = []
+        for item in self.track_selection_list.selectedItems():
+            track = item.data(Qt.ItemDataRole.UserRole)
+            if track:
+                selected_tracks.append(track)
+        return selected_tracks
     
     def _on_density_changed(self, value):
         """密度滑块变化"""
@@ -1262,20 +1397,25 @@ class RemixDialog(QDialog):
             QMessageBox.warning(self, "提示", "请先导入素材并创建分段！")
             return
         
-        logger.info("开始为所有音轨生成二创")
+        # 获取选中的音轨
+        selected_tracks = self._get_selected_tracks()
         
-        # 获取所有音轨
-        all_tracks = self.track_manager.get_all_tracks()
-        
-        if not all_tracks:
-            QMessageBox.warning(self, "提示", "没有可用的音轨！")
+        if not selected_tracks:
+            QMessageBox.warning(self, "提示", "请至少选择一个音轨！")
             return
         
+        logger.info(f"开始为 {len(selected_tracks)} 个选中音轨生成二创")
+        
         # 确认对话框
+        track_names = "\n".join([f"  • {track.name} ({track.source_type})" for track in selected_tracks[:5]])
+        if len(selected_tracks) > 5:
+            track_names += f"\n  ... 还有 {len(selected_tracks) - 5} 个音轨"
+        
         reply = QMessageBox.question(
             self,
             "确认生成",
-            f"将用 {len(self.segments)} 个素材片段完全替换 {len(all_tracks)} 个音轨。\n\n"
+            f"将用 {len(self.segments)} 个素材片段为以下 {len(selected_tracks)} 个音轨生成二创版本：\n\n"
+            f"{track_names}\n\n"
             f"系统会自动分析原曲音高，智能选择片段并调整音高。\n"
             f"这可能需要几分钟时间，确定继续吗？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -1286,14 +1426,20 @@ class RemixDialog(QDialog):
         
         try:
             # 创建进度对话框
-            progress = QProgressDialog("正在为所有音轨生成二创...", "取消", 0, 0, self)
+            progress = QProgressDialog(
+                f"正在为 {len(selected_tracks)} 个音轨生成二创...", 
+                "取消", 
+                0, 
+                0, 
+                self
+            )
             progress.setWindowModality(Qt.WindowModality.WindowModal)
             progress.setMinimumDuration(0)
             progress.show()
             
             # 创建线程
             self.remix_thread = RemixThread(
-                all_tracks,
+                selected_tracks,  # 使用选中的音轨
                 self.segments
             )
             
@@ -1304,7 +1450,7 @@ class RemixDialog(QDialog):
             self.remix_thread.error.connect(lambda err: self._on_remix_error(err, progress))
             self.remix_thread.progress.connect(lambda msg: progress.setLabelText(msg))
             
-            logger.info(f"启动二创线程，处理 {len(all_tracks)} 个音轨")
+            logger.info(f"启动二创线程，处理 {len(selected_tracks)} 个音轨")
             self.remix_thread.start()
             
         except Exception as e:

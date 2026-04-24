@@ -18,6 +18,7 @@ from src.audio_processing.audio_player import AudioPlayer
 from src.models.track_manager import TrackManager
 from src.models.project_manager import ProjectManager
 from src.gui.track_row_widget import TrackListWidget
+from src.utils.crash_protection import CrashProtection
 
 logger = logging.getLogger(__name__)
 
@@ -410,9 +411,14 @@ class MainWindow(QMainWindow):
         self.track_manager.track_param_changed.connect(self.on_track_param_changed)
         self.player.position_updated.connect(self.track_list_widget.update_playhead)
         self.track_list_widget.seek_requested.connect(self.player.seek)
+        
+        # 安装全局异常处理器
+        CrashProtection.install_global_exception_handler()
+        logger.info("崩溃保护已启用")
     
+    @CrashProtection.protect_slot("音轨参数更新错误")
     def on_track_param_changed(self, track_id: str, param: str, value):
-        """音轨参数变化 - 实时更新播放"""
+        """音轨参数变化 - 实时更新播放（带保护）"""
         # 如果正在播放，实时重新混合
         if self.player.is_playing():
             self.player.reload_mix()

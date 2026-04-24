@@ -171,7 +171,13 @@ class TrackManager(QObject):
             self.track_param_changed.emit(track_id, param, value)
         else:
             # 使用防抖：收集变化，延迟发送
-            self._pending_changes[track_id] = (param, value)
+            # 为每个音轨+参数组合创建唯一键
+            change_key = f"{track_id}:{param}"
+            self._pending_changes[change_key] = (track_id, param, value)
+            
+            # 重启定时器
+            if self._param_change_timer.isActive():
+                self._param_change_timer.stop()
             self._param_change_timer.start(self._debounce_delay_ms)
     
     def _emit_batch_changes(self):
@@ -181,7 +187,7 @@ class TrackManager(QObject):
         
         logger.debug(f"批量发送 {len(self._pending_changes)} 个参数变化")
         
-        for track_id, (param, value) in self._pending_changes.items():
+        for change_key, (track_id, param, value) in self._pending_changes.items():
             self.track_param_changed.emit(track_id, param, value)
         
         self._pending_changes.clear()

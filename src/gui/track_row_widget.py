@@ -52,6 +52,12 @@ class TrackRowWidget(QWidget):
         self._current_x_min = 0
         self._current_x_max = 1
         
+        # 音量调整防抖定时器
+        self._volume_debounce_timer = QTimer()
+        self._volume_debounce_timer.setSingleShot(True)
+        self._volume_debounce_timer.timeout.connect(self._emit_volume_changed)
+        self._pending_volume = None
+        
         self._init_ui()
         
         # 设置固定高度
@@ -470,9 +476,21 @@ class TrackRowWidget(QWidget):
         self.solo_toggled.emit(self.track.id, self.solo_btn.isChecked())
     
     def _on_volume_changed(self, value: int):
-        """音量滑块变化"""
+        """音量滑块变化（带防抖）"""
+        # 立即更新显示
         self.volume_label.setText(f"{value:+.1f}")
-        self.volume_changed.emit(self.track.id, float(value))
+        
+        # 保存待发送的值
+        self._pending_volume = float(value)
+        
+        # 使用防抖：100ms 后才发送信号
+        self._volume_debounce_timer.start(100)
+    
+    def _emit_volume_changed(self):
+        """实际发送音量变化信号"""
+        if self._pending_volume is not None:
+            self.volume_changed.emit(self.track.id, self._pending_volume)
+            self._pending_volume = None
     
     def _on_delete_clicked(self):
         """删除按钮点击"""
