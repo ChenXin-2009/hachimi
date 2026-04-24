@@ -4,12 +4,34 @@
 import numpy as np
 import sounddevice as sd
 from typing import List, Optional
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QRunnable, QThreadPool, pyqtSlot
 import logging
 from src.models.track import Track
 from src.audio_processing.audio_mixer import AudioMixer
 
 logger = logging.getLogger(__name__)
+
+
+class MixAudioTask(QRunnable):
+    """异步音频混合任务"""
+    
+    def __init__(self, mixer: AudioMixer, tracks: List[Track], callback):
+        super().__init__()
+        self.mixer = mixer
+        self.tracks = tracks
+        self.callback = callback
+        self.setAutoDelete(True)
+    
+    def run(self):
+        """在后台线程执行混音"""
+        try:
+            logger.debug("开始异步混音")
+            mixed_audio = self.mixer.mix_tracks(self.tracks)
+            self.callback(mixed_audio)
+            logger.debug("异步混音完成")
+        except Exception as e:
+            logger.error(f"异步混音失败: {e}", exc_info=True)
+            self.callback(None)
 
 
 class AudioPlayer(QObject):
@@ -35,6 +57,18 @@ class AudioPlayer(QObject):
         self._position_timer = QTimer()
         self._position_timer.timeout.connect(self._update_position)
         self._position_timer.setInterval(50)  # 每 50ms 更新一次
+        
+        # 性能优化：异步混音
+        self._thread_pool = QThreadPool()
+        self._thread_pool.setMaxThreadCount(2)  # 限制线程数
+        self._is_mixing = False  # 是否正在混音
+        self._needs_remix = False  # 是否需要重新混音
+        
+        # 性能优化：混音防抖定时器
+        self._remix_timer = QTimer()
+        self._remix_timer.setSingleShot(True)
+        self._remix_timer.timeout.connect(self._do_reload_mix)
+        self._remix_debounce_ms = 150  # 150ms 防抖延迟
         
         logger.info("音频播放器初始化")
     
@@ -62,20 +96,60 @@ class AudioPlayer(QObject):
             logger.warning("没有可播放的音频")
     
     def reload_mix(self):
-        """重新混合音轨（用于实时更新音轨参数）"""
+        """重新混合音轨（带防抖和智能策略）"""
         if not self._tracks:
             return
+        
+        if self._is_playing:
+            # 播放中：使用防抖延迟混音
+            self._remix_timer.start(self._remix_debounce_ms)
+        else:
+            # 暂停中：标记需要混音，播放时再执行
+            self._needs_remix = True
+            logger.debug("标记需要重新混音（延迟到播放时）")
+    
+    def _do_reload_mix(self):
+        """实际执行重新混音"""
+        if self._is_mixing:
+            # 正在混音中，稍后重试
+            self._remix_timer.start(50)
+            return
+        
+        logger.debug("开始重新混音")
+        self._reload_mix_async()
+    
+    def _reload_mix_async(self):
+        """异步重新混音"""
+        if not self._tracks:
+            return
+        
+        self._is_mixing = True
         
         # 保存当前位置
         current_position = self._current_frame
         
-        # 重新混合
-        self._mixed_audio = self.mixer.mix_tracks(self._tracks)
+        # 创建异步任务
+        task = MixAudioTask(self.mixer, self._tracks, self._on_mix_complete)
+        self._thread_pool.start(task)
         
-        # 恢复位置
-        self._current_frame = current_position
+        # 保存位置以便恢复
+        self._saved_position = current_position
+    
+    @pyqtSlot(object)
+    def _on_mix_complete(self, mixed_audio):
+        """混音完成回调"""
+        self._is_mixing = False
         
-        logger.debug("实时重新混合音轨")
+        if mixed_audio is not None:
+            self._mixed_audio = mixed_audio
+            
+            # 恢复播放位置
+            if hasattr(self, '_saved_position'):
+                self._current_frame = min(self._saved_position, self._mixed_audio.shape[1])
+            
+            logger.debug("混音更新完成")
+        else:
+            logger.warning("混音失败")
     
     def play(self):
         """开始播放"""
@@ -85,6 +159,22 @@ class AudioPlayer(QObject):
         
         if self._is_playing and not self._is_paused:
             logger.debug("已经在播放中")
+            return
+        
+        # 如果需要重新混音，先执行混音
+        if self._needs_remix:
+            logger.info("播放前重新混音")
+            self._reload_mix_async()
+            self._needs_remix = False
+            # 等待混音完成后再播放
+            QTimer.singleShot(200, self._start_playback)
+            return
+        
+        self._start_playback()
+    
+    def _start_playback(self):
+        """实际开始播放"""
+        if self._mixed_audio is None:
             return
         
         logger.info("开始播放")

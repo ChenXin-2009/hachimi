@@ -131,7 +131,7 @@ class AudioMixer:
     
     def mix_tracks(self, tracks: List[Track]) -> Optional[np.ndarray]:
         """
-        混合多个音轨
+        混合多个音轨（使用缓存优化）
         
         Args:
             tracks: 音轨列表
@@ -161,13 +161,14 @@ class AudioMixer:
         
         logger.info(f"混合 {len(tracks_to_mix)} 个音轨")
         
-        # 应用效果并收集处理后的音频
+        # 使用缓存获取处理后的音频
         processed_tracks = []
         max_length = 0
         
         for track in tracks_to_mix:
-            processed = self.apply_track_effects(track)
-            if processed.size > 0:
+            # 使用缓存的处理后音频
+            processed = track.get_processed_audio(self)
+            if processed is not None and processed.size > 0:
                 processed_tracks.append(processed)
                 max_length = max(max_length, processed.shape[1])
         
