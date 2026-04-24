@@ -60,7 +60,7 @@ class AudioPlayer(QObject):
         
         # 性能优化：异步混音
         self._thread_pool = QThreadPool()
-        self._thread_pool.setMaxThreadCount(2)  # 限制线程数
+        self._thread_pool.setMaxThreadCount(1)  # 限制为单线程，避免并发
         self._is_mixing = False  # 是否正在混音
         self._needs_remix = False  # 是否需要重新混音
         
@@ -68,7 +68,11 @@ class AudioPlayer(QObject):
         self._remix_timer = QTimer()
         self._remix_timer.setSingleShot(True)
         self._remix_timer.timeout.connect(self._do_reload_mix)
-        self._remix_debounce_ms = 150  # 150ms 防抖延迟
+        self._remix_debounce_ms = 300  # 增加到 300ms 防抖延迟
+        
+        # 性能优化：混音频率限制
+        self._last_mix_time = 0  # 上次混音时间
+        self._min_mix_interval_ms = 500  # 最小混音间隔 500ms
         
         logger.info("音频播放器初始化")
     
@@ -102,64 +106,99 @@ class AudioPlayer(QObject):
         
         # 检查是否正在混音
         if self._is_mixing:
-            logger.debug("正在混音中，跳过本次请求")
+            logger.debug("正在混音中，标记需要重新混音")
+            self._needs_remix = True
             return
         
         if self._is_playing:
-            # 播放中：使用防抖延迟混音，并限制频率
-            if not self._remix_timer.isActive():
-                self._remix_timer.start(self._remix_debounce_ms)
-            else:
-                # 定时器已激活，重置定时器
-                self._remix_timer.stop()
-                self._remix_timer.start(self._remix_debounce_ms)
+            # 播放中：使用更激进的策略
+            # 1. 如果定时器已激活，不做任何事（等待当前定时器完成）
+            if self._remix_timer.isActive():
+                logger.debug("混音定时器已激活，跳过本次请求")
+                return
+            
+            # 2. 启动定时器
+            self._remix_timer.start(self._remix_debounce_ms)
         else:
             # 暂停中：标记需要混音，播放时再执行
             self._needs_remix = True
             logger.debug("标记需要重新混音（延迟到播放时）")
     
     def _do_reload_mix(self):
-        """实际执行重新混音"""
+        """实际执行重新混音（带保护和频率限制）"""
         if self._is_mixing:
             # 正在混音中，稍后重试
-            self._remix_timer.start(50)
+            logger.debug("正在混音中，延迟 100ms 重试")
+            self._remix_timer.start(100)
             return
         
-        logger.debug("开始重新混音")
-        self._reload_mix_async()
+        # 检查混音频率限制
+        import time
+        current_time = time.time() * 1000  # 转换为毫秒
+        elapsed = current_time - self._last_mix_time
+        
+        if elapsed < self._min_mix_interval_ms:
+            # 距离上次混音时间太短，延迟执行
+            delay = int(self._min_mix_interval_ms - elapsed)
+            logger.debug(f"混音频率限制，延迟 {delay}ms")
+            self._remix_timer.start(delay)
+            return
+        
+        try:
+            logger.debug("开始重新混音")
+            self._last_mix_time = current_time
+            self._reload_mix_async()
+        except Exception as e:
+            logger.error(f"启动异步混音失败: {e}", exc_info=True)
+            self._is_mixing = False
+            self._needs_remix = True  # 标记需要重试
     
     def _reload_mix_async(self):
-        """异步重新混音"""
+        """异步重新混音（带保护）"""
         if not self._tracks:
             return
         
-        self._is_mixing = True
-        
-        # 保存当前位置
-        current_position = self._current_frame
-        
-        # 创建异步任务
-        task = MixAudioTask(self.mixer, self._tracks, self._on_mix_complete)
-        self._thread_pool.start(task)
-        
-        # 保存位置以便恢复
-        self._saved_position = current_position
+        try:
+            self._is_mixing = True
+            
+            # 保存当前位置
+            current_position = self._current_frame
+            
+            # 创建异步任务
+            task = MixAudioTask(self.mixer, self._tracks, self._on_mix_complete)
+            self._thread_pool.start(task)
+            
+            # 保存位置以便恢复
+            self._saved_position = current_position
+        except Exception as e:
+            logger.error(f"创建异步混音任务失败: {e}", exc_info=True)
+            self._is_mixing = False
     
     @pyqtSlot(object)
     def _on_mix_complete(self, mixed_audio):
-        """混音完成回调"""
-        self._is_mixing = False
-        
-        if mixed_audio is not None:
-            self._mixed_audio = mixed_audio
+        """混音完成回调（带保护）"""
+        try:
+            self._is_mixing = False
             
-            # 恢复播放位置
-            if hasattr(self, '_saved_position'):
-                self._current_frame = min(self._saved_position, self._mixed_audio.shape[1])
-            
-            logger.debug("混音更新完成")
-        else:
-            logger.warning("混音失败")
+            if mixed_audio is not None:
+                self._mixed_audio = mixed_audio
+                
+                # 恢复播放位置
+                if hasattr(self, '_saved_position'):
+                    self._current_frame = min(self._saved_position, self._mixed_audio.shape[1])
+                
+                logger.debug("混音更新完成")
+                
+                # 如果在混音期间又有新的请求，重新混音
+                if self._needs_remix:
+                    self._needs_remix = False
+                    logger.debug("检测到待处理的混音请求，重新混音")
+                    self._remix_timer.start(100)
+            else:
+                logger.warning("混音失败，返回 None")
+        except Exception as e:
+            logger.error(f"混音完成回调出错: {e}", exc_info=True)
+            self._is_mixing = False
     
     def play(self):
         """开始播放"""

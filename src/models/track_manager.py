@@ -61,8 +61,8 @@ class TrackManager(QObject):
         self._param_change_timer = QTimer()
         self._param_change_timer.setSingleShot(True)
         self._param_change_timer.timeout.connect(self._emit_batch_changes)
-        self._debounce_delay_ms = 100  # 100ms 防抖延迟
-        self._pending_changes: Dict[str, tuple] = {}  # {track_id: (param, value)}
+        self._debounce_delay_ms = 200  # 增加到 200ms 防抖延迟
+        self._pending_changes: Dict[str, tuple] = {}  # {change_key: (track_id, param, value)}
         
         logger.info("音轨管理器初始化")
     

@@ -191,8 +191,8 @@ class TrackControlWidget(QWidget):
         # 保存待发送的值
         self._pending_volume = float(value)
         
-        # 使用防抖：100ms 后才发送信号
-        self._volume_debounce_timer.start(100)
+        # 使用更长的防抖：200ms 后才发送信号
+        self._volume_debounce_timer.start(200)
     
     def _emit_volume_changed(self):
         """实际发送音量变化信号"""
