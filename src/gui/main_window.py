@@ -356,6 +356,14 @@ class MainWindow(QMainWindow):
         smart_remix_action.triggered.connect(self.open_remix_dialog)
         remix_menu.addAction(smart_remix_action)
         
+        # 工具菜单
+        tools_menu = menu_bar.addMenu("工具(&T)")
+        
+        audio_to_midi_action = QAction("音频转MIDI(&M)...", self)
+        audio_to_midi_action.setShortcut(QKeySequence("Ctrl+M"))
+        audio_to_midi_action.triggered.connect(self.open_audio_to_midi_dialog)
+        tools_menu.addAction(audio_to_midi_action)
+        
         # 帮助菜单
         help_menu = menu_bar.addMenu("帮助(&H)")
         
@@ -665,6 +673,74 @@ class MainWindow(QMainWindow):
         
         dialog = RemixDialog(self.track_manager, self)
         dialog.exec()
+    
+    def open_audio_to_midi_dialog(self):
+        """打开音频转MIDI对话框"""
+        from src.gui.midi_dialog import MidiDialog
+        
+        # 检查是否有音轨
+        tracks = self.track_manager.get_all_tracks()
+        if not tracks:
+            QMessageBox.warning(
+                self,
+                "提示",
+                "请先打开音频文件并进行分离！\n\n"
+                "建议：\n"
+                "1. 打开音频文件\n"
+                "2. 分离出人声或乐器音轨\n"
+                "3. 选择要转换的音轨进行MIDI转换"
+            )
+            return
+        
+        # 让用户选择要转换的音轨
+        from PyQt6.QtWidgets import QInputDialog
+        
+        track_names = [f"{track.name} ({track.id})" for track in tracks]
+        track_name, ok = QInputDialog.getItem(
+            self,
+            "选择音轨",
+            "请选择要转换为MIDI的音轨：",
+            track_names,
+            0,
+            False
+        )
+        
+        if not ok:
+            return
+        
+        # 获取选中的音轨
+        track_index = track_names.index(track_name)
+        selected_track = tracks[track_index]
+        
+        # 导出音轨为临时文件
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        temp_path = temp_file.name
+        temp_file.close()
+        
+        try:
+            # 导出单个音轨
+            import soundfile as sf
+            sf.write(temp_path, selected_track.audio_data.T, selected_track.sample_rate)
+            
+            # 打开转换对话框
+            dialog = MidiDialog(temp_path, self)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"音轨导出失败: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "错误",
+                f"音轨导出失败：\n{e}"
+            )
+        finally:
+            # 清理临时文件
+            try:
+                import os
+                os.unlink(temp_path)
+            except:
+                pass
     
     def closeEvent(self, event):
         """关闭事件"""

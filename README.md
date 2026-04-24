@@ -30,7 +30,14 @@
   - `htdemucs_6s` - 6音轨（vocals, drums, bass, other, guitar, piano）**默认**
 - 🎚️ **音轨控制**：独立的音量、静音、独奏控制
 - 🎨 **多轨道波形可视化**：直观的波形编辑界面
-- 🔄 **智能二创功能** ⭐ **新功能**
+- 🎹 **音频转MIDI** ⭐ **新功能**
+  - 使用 Spotify Basic Pitch 进行高质量转换
+  - 支持多音（polyphonic）转录
+  - 支持音高弯曲检测
+  - 可调节的转换参数
+  - 自动合并音符片段（解决分段问题）
+  - 适用于人声和所有乐器
+- 🔄 **智能二创功能**
   - 自动检测音频片段
   - 智能匹配原曲音轨
   - 自动调整音高
@@ -107,9 +114,12 @@ python main.py
    - 滑块：调整音量（-60dB 到 +12dB）
    - 🗑 按钮：删除音轨
 5. **播放预览**：使用播放控制按钮预听效果，点击进度条可跳转
-6. **导出音频**：点击"文件 → 导出音频"保存结果
+6. **音频转MIDI**：点击"工具 → 音频转MIDI"将音轨转换为MIDI（需要先安装 `pip install basic-pitch`）
+7. **导出音频**：点击"文件 → 导出音频"保存结果
 
-详细使用说明请查看 [快速入门指南](docs/QUICKSTART.md)。
+详细使用说明请查看：
+- [快速入门指南](docs/QUICKSTART.md)
+- [音频转MIDI使用指南](docs/AUDIO_TO_MIDI_GUIDE.md)
 
 ## 📊 技术栈
 
@@ -185,6 +195,7 @@ pytest tests/
 ## 📚 文档
 
 - [快速入门指南](docs/QUICKSTART.md)
+- [音频转MIDI使用指南](docs/AUDIO_TO_MIDI_GUIDE.md) ⭐ 新增
 - [开发状态](docs/DEVELOPMENT_STATUS.md)
 - [项目总结](docs/SUMMARY.md)
 - [需求文档](.kiro/specs/audio-separation-tool/requirements.md)
@@ -208,6 +219,7 @@ pytest tests/
 ## 🙏 致谢
 
 - [Demucs](https://github.com/facebookresearch/demucs) - Meta 开源的音频分离模型
+- [Basic Pitch](https://github.com/spotify/basic-pitch) - Spotify 开源的音频转MIDI模型
 - [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) - 强大的 Python GUI 框架
 - [PyQtGraph](https://www.pyqtgraph.org/) - 高性能科学绘图库
 - [Pedalboard](https://github.com/spotify/pedalboard) - Spotify 开源的音频处理库

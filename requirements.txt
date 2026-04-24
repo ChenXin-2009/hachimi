@@ -15,6 +15,10 @@ pydub>=0.25.0
 soundfile>=0.12.0
 librosa>=0.10.0
 
+# 音频转MIDI
+basic-pitch>=0.3.0  # Spotify的音频转MIDI库
+crepe>=0.0.12  # 音高检测（可选）
+
 # 音频播放
 sounddevice>=0.4.6
 
