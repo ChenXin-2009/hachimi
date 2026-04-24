@@ -8,6 +8,7 @@ import soundfile as sf
 import librosa
 import logging
 from .track import Track
+from src.audio_processing.audio_loader import AudioLoader
 
 logger = logging.getLogger(__name__)
 
@@ -109,25 +110,30 @@ class TrackManager(QObject):
         try:
             logger.info(f"加载替换音频: {audio_path}")
             
-            # 加载音频文件
-            audio_data, sr = sf.read(audio_path, always_2d=True)
-            audio_data = audio_data.T  # 转换为 (channels, samples)
-            
             # 获取目标音轨
             target_track = self._tracks[track_id]
             
-            # 重采样到匹配的采样率
-            if sr != target_track.sample_rate:
-                logger.info(f"重采样: {sr} Hz -> {target_track.sample_rate} Hz")
-                audio_data_resampled = []
-                for channel in audio_data:
-                    resampled = librosa.resample(
-                        channel,
-                        orig_sr=sr,
-                        target_sr=target_track.sample_rate
-                    )
-                    audio_data_resampled.append(resampled)
-                audio_data = np.array(audio_data_resampled)
+            try:
+                # 使用 AudioLoader 加载并自动重采样
+                audio_data, sr = AudioLoader.load(audio_path, target_sr=target_track.sample_rate)
+            except Exception as e:
+                logger.warning(f"AudioLoader 加载失败，使用备用方案: {e}")
+                # 备用方案：使用 soundfile + librosa
+                audio_data, sr = sf.read(audio_path, always_2d=True)
+                audio_data = audio_data.T
+                
+                # 重采样到匹配的采样率
+                if sr != target_track.sample_rate:
+                    logger.info(f"重采样: {sr} Hz -> {target_track.sample_rate} Hz")
+                    audio_data_resampled = []
+                    for channel in audio_data:
+                        resampled = librosa.resample(
+                            channel,
+                            orig_sr=sr,
+                            target_sr=target_track.sample_rate
+                        )
+                        audio_data_resampled.append(resampled)
+                    audio_data = np.array(audio_data_resampled)
             
             # 更新音轨
             target_track.audio_data = audio_data

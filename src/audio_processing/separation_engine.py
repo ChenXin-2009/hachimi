@@ -10,6 +10,7 @@ from demucs.pretrained import get_model
 from demucs.apply import apply_model
 from demucs.audio import AudioFile
 import logging
+from .audio_loader import AudioLoader
 
 logger = logging.getLogger(__name__)
 
@@ -101,20 +102,34 @@ class SeparationEngine:
                 logger.info("分离操作已取消")
                 return {}
             
-            # 加载音频
+            # 加载音频（使用新的 AudioLoader）
             if progress_callback:
                 progress_callback(10.0)
             
             logger.info("加载音频文件")
-            wav = AudioFile(str(audio_path)).read(
-                streams=0,
-                samplerate=self.model.samplerate,
-                channels=self.model.audio_channels
-            )
-            
-            # 确保转换为 numpy 数组
-            if isinstance(wav, torch.Tensor):
-                wav = wav.numpy()
+            try:
+                # 使用 AudioLoader 加载并重采样
+                wav, _ = AudioLoader.load(str(audio_path), target_sr=self.model.samplerate)
+                
+                # 确保声道数匹配
+                if wav.shape[0] != self.model.audio_channels:
+                    if self.model.audio_channels == 2 and wav.shape[0] == 1:
+                        # 单声道转立体声
+                        wav = np.repeat(wav, 2, axis=0)
+                    elif self.model.audio_channels == 1 and wav.shape[0] == 2:
+                        # 立体声转单声道
+                        wav = wav.mean(axis=0, keepdims=True)
+                
+            except Exception as e:
+                logger.warning(f"AudioLoader 加载失败，使用备用方法: {e}")
+                # 备用方案：使用原始方法
+                wav = AudioFile(str(audio_path)).read(
+                    streams=0,
+                    samplerate=self.model.samplerate,
+                    channels=self.model.audio_channels
+                )
+                if isinstance(wav, torch.Tensor):
+                    wav = wav.numpy()
             
             # 转换为 tensor
             wav = torch.from_numpy(wav).to(self.device)

@@ -1232,6 +1232,10 @@ class RemixDialog(QDialog):
     
     def _update_play_segment_button(self):
         """更新播放片段按钮状态"""
+        # 检查按钮是否存在（可能被注释掉了）
+        if not hasattr(self, 'play_segment_btn'):
+            return
+        
         self.play_segment_btn.setEnabled(
             self.sample_audio is not None and 
             self.selected_region is not None and 
@@ -1269,8 +1273,10 @@ class RemixDialog(QDialog):
                 self.playback_timer.start(100)  # 每100ms更新一次，降低频率
             
             self.is_playing = True
-            self.play_all_btn.setText("⏹ 停止")
-            self.stop_btn.setEnabled(True)
+            if hasattr(self, 'play_all_btn'):
+                self.play_all_btn.setText("⏹ 停止")
+            if hasattr(self, 'stop_btn'):
+                self.stop_btn.setEnabled(True)
             
             logger.info("开始播放全部音频")
             
@@ -1312,8 +1318,10 @@ class RemixDialog(QDialog):
                 self.playback_timer.start(100)  # 每100ms更新一次
             
             self.is_playing = True
-            self.play_segment_btn.setText("⏹ 停止")
-            self.stop_btn.setEnabled(True)
+            if hasattr(self, 'play_segment_btn'):
+                self.play_segment_btn.setText("⏹ 停止")
+            if hasattr(self, 'stop_btn'):
+                self.stop_btn.setEnabled(True)
             
             logger.info(f"开始播放片段: {segment.name}")
             
@@ -1345,9 +1353,12 @@ class RemixDialog(QDialog):
             self.is_playing = False
             
             # 更新按钮状态
-            self.play_all_btn.setText("▶ 播放全部")
-            self.play_segment_btn.setText("▶ 播放片段")
-            self.stop_btn.setEnabled(False)
+            if hasattr(self, 'play_all_btn'):
+                self.play_all_btn.setText("▶ 播放全部")
+            if hasattr(self, 'play_segment_btn'):
+                self.play_segment_btn.setText("▶ 播放片段")
+            if hasattr(self, 'stop_btn'):
+                self.stop_btn.setEnabled(False)
             
             logger.debug("停止播放")
             

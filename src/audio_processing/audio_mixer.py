@@ -8,6 +8,8 @@ import soundfile as sf
 from pydub import AudioSegment
 import logging
 from src.models.track import Track
+from .audio_effects import FastAudioEffects
+from .audio_loader import AudioLoader
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +62,21 @@ class AudioMixer:
             处理后的音频
         """
         try:
-            # 使用 pedalboard 的 Gain 效果
-            board = Pedalboard([Gain(gain_db=volume_db)])
-            
-            # pedalboard 需要 (samples, channels) 格式
-            audio_transposed = audio.T
-            processed = board(audio_transposed, sample_rate)
-            
-            return processed.T
+            # 使用 FastAudioEffects（numba 加速）
+            return FastAudioEffects.apply_volume(audio, volume_db)
         except Exception as e:
-            logger.error(f"应用音量失败: {e}")
-            # 降级方案：手动计算
-            gain_linear = 10 ** (volume_db / 20.0)
-            return audio * gain_linear
+            logger.error(f"FastAudioEffects 失败，使用备用方案: {e}")
+            try:
+                # 备用方案 1：使用 pedalboard
+                board = Pedalboard([Gain(gain_db=volume_db)])
+                audio_transposed = audio.T
+                processed = board(audio_transposed, sample_rate)
+                return processed.T
+            except Exception as e2:
+                logger.error(f"Pedalboard 失败，使用手动计算: {e2}")
+                # 备用方案 2：手动计算
+                gain_linear = 10 ** (volume_db / 20.0)
+                return audio * gain_linear
     
     def _apply_pan(self, audio: np.ndarray, pan: float, sample_rate: int) -> np.ndarray:
         """
@@ -90,13 +94,18 @@ class AudioMixer:
             # 单声道，无法应用平衡
             return audio
         
-        # 手动实现平衡调整
-        result = audio.copy()
-        if pan < 0:  # 偏左
-            result[1] *= (1 + pan)  # 减小右声道
-        else:  # 偏右
-            result[0] *= (1 - pan)  # 减小左声道
-        return result
+        try:
+            # 使用 FastAudioEffects（numba 加速）
+            return FastAudioEffects.apply_pan(audio, pan)
+        except Exception as e:
+            logger.error(f"FastAudioEffects 失败，使用备用方案: {e}")
+            # 备用方案：手动实现
+            result = audio.copy()
+            if pan < 0:  # 偏左
+                result[1] *= (1 + pan)  # 减小右声道
+            else:  # 偏右
+                result[0] *= (1 - pan)  # 减小左声道
+            return result
     
     def _apply_time_offset(self, audio: np.ndarray, offset_ms: float, sample_rate: int) -> np.ndarray:
         """
@@ -236,40 +245,36 @@ class AudioMixer:
             # 转换为 (samples, channels) 格式
             audio_to_export = mixed.T
             
-            if format.lower() in ["wav", "flac"]:
-                # 使用 soundfile 导出 WAV/FLAC
-                subtype = "PCM_24" if quality == "high" else "PCM_16"
-                sf.write(output_path, audio_to_export, sample_rate, subtype=subtype)
-                
-            elif format.lower() == "mp3":
-                # 使用 pydub 导出 MP3
-                # 先保存为临时 WAV
-                import tempfile
-                import os
-                
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                    tmp_path = tmp.name
-                
-                sf.write(tmp_path, audio_to_export, sample_rate)
-                
-                # 转换为 MP3
-                audio_segment = AudioSegment.from_wav(tmp_path)
-                
-                bitrate_map = {
-                    "low": "128k",
-                    "medium": "192k",
-                    "high": "320k"
-                }
-                bitrate = bitrate_map.get(quality, "192k")
-                
-                audio_segment.export(output_path, format="mp3", bitrate=bitrate)
-                
-                # 删除临时文件
-                os.unlink(tmp_path)
-            
-            else:
-                logger.error(f"不支持的格式: {format}")
-                return False
+            # 使用 AudioLoader 统一保存（支持更多格式）
+            try:
+                AudioLoader.save(output_path, mixed, sample_rate, format=format)
+            except Exception as e:
+                logger.warning(f"AudioLoader 保存失败，使用备用方案: {e}")
+                # 备用方案：使用原始方法
+                if format.lower() in ["wav", "flac"]:
+                    subtype = "PCM_24" if quality == "high" else "PCM_16"
+                    sf.write(output_path, audio_to_export, sample_rate, subtype=subtype)
+                elif format.lower() == "mp3":
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                        tmp_path = tmp.name
+                    
+                    sf.write(tmp_path, audio_to_export, sample_rate)
+                    audio_segment = AudioSegment.from_wav(tmp_path)
+                    
+                    bitrate_map = {
+                        "low": "128k",
+                        "medium": "192k",
+                        "high": "320k"
+                    }
+                    bitrate = bitrate_map.get(quality, "192k")
+                    audio_segment.export(output_path, format="mp3", bitrate=bitrate)
+                    os.unlink(tmp_path)
+                else:
+                    logger.error(f"不支持的格式: {format}")
+                    return False
             
             if progress_callback:
                 progress_callback(100.0)

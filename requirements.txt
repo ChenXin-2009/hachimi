@@ -20,6 +20,7 @@ sounddevice>=0.4.6
 
 # 数值计算
 numpy>=1.24.0
+numba>=0.57.0  # JIT 编译加速音频处理
 
 # 测试（可选）
 pytest>=7.4.0
